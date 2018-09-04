@@ -32,6 +32,8 @@
 #include "parser.h"
 #include "data.h"
 
+static network *dark_net;
+
 load_args get_base_args(network *net)
 {
     load_args args = {0};
@@ -53,12 +55,38 @@ load_args get_base_args(network *net)
 network *load_network(char *cfg, char *weights, int clear)
 {
     network *net = parse_network_cfg(cfg);
+    network *new_net = (network*)malloc(sizeof(network));
+    new_net = net;
+    network net2;
     if(weights && weights[0] != 0){
+	printf("weights && weights[0] != 0");
         load_weights(net, weights);
     }
     if(clear) (*net->seen) = 0;
-    return net;
+   for(int i=0; i<107; i++) {
+	layer l = new_net->layers[i];
+       printf("%4d x%4d x%4d  %5.3f BFLOPs\n", l.out_w, l.out_h, l.out_c, (2.0 * l.n * l.size*l.size*l.c/l.groups * l.out_h*l.out_w)/1000000000.);
+    }
+    printf("sizeof(net2) : %d\n", sizeof(net2));
+    printf("new net address : %d   size : %d\n", new_net, sizeof(*new_net));
+    return new_net;
 }
+
+network *load_network2(char *cfg, char *weights, int *inw, int *inh, int *outw, int *outh)
+{
+    dark_net = parse_network_cfg(cfg);
+    network net2;
+    if(weights && weights[0] != 0){
+        load_weights(dark_net, weights);
+    }
+    *inw = dark_net->w;
+    *inh = dark_net->h;
+    *outw = dark_net->layers[dark_net->n - 2].out_w;
+    *outh = dark_net->layers[dark_net->n - 2].out_h;
+    set_batch_network(dark_net, 1);
+    return dark_net;
+}
+
 
 size_t get_current_batch(network *net)
 {
@@ -497,6 +525,19 @@ void top_predictions(network *net, int k, int *index)
 float *network_predict(network *net, float *input)
 {
     network orig = *net;
+    net->input = input;
+    net->truth = 0;
+    net->train = 0;
+    net->delta = 0;
+    forward_network(net);
+    float *out = net->output;
+    *net = orig;
+    return out;
+}
+
+float *network_predict2(network *net, float *input)
+{
+    network orig = *dark_net;
     net->input = input;
     net->truth = 0;
     net->train = 0;
